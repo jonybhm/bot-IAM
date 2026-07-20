@@ -6,3 +6,4 @@ pypdf
 sentence-transformers
 chromadb
 ollama
+requests 
