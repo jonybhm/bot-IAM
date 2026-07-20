@@ -7,7 +7,7 @@ class Embedder:
     def __init__(self, ruta_vectorstore: str):
         self.modelo = SentenceTransformer(MODELO_EMBEDDINGS)
         self.cliente = chromadb.PersistentClient(path=ruta_vectorstore)
-        self.coleccion = self.cliente.get_or_create_collection("documentos_iam")
+        self.coleccion = self.cliente.get_or_create_collection(name="documentos_iam", metadata={"hnsw:space": "cosine"})
 
     def indexar_chunks(self, chunks: list[str], nombre_documento: str):
         """
