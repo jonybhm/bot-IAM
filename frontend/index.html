@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>IAM Support Bot</title>
+<style>
+  :root { --bg: #343541; --bg-user: #444654; --texto: #ececf1; --acento: #10a37f; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, sans-serif;
+    background: var(--bg); color: var(--texto);
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header { padding: 16px; text-align: center; font-weight: 600; border-bottom: 1px solid #4443; }
+  #chat { flex: 1; overflow-y: auto; padding: 20px; }
+  .mensaje { max-width: 700px; margin: 0 auto 16px; padding: 12px 16px; border-radius: 8px; line-height: 1.5; }
+  .user { background: var(--bg-user); }
+  .bot { background: transparent; border: 1px solid #4443; }
+  .rol { font-size: 12px; opacity: 0.6; margin-bottom: 4px; }
+  #form { display: flex; gap: 8px; padding: 16px; max-width: 700px; margin: 0 auto; width: 100%; }
+  #input {
+    flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #555;
+    background: var(--bg-user); color: var(--texto); font-size: 14px;
+  }
+  button {
+    background: var(--acento); color: white; border: none;
+    padding: 12px 20px; border-radius: 8px; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <header>IAM Support Bot</header>
+  <div id="chat"></div>
+  <form id="form">
+    <input id="input" placeholder="Preguntá sobre IAM, autenticación, tokens..." autocomplete="off" />
+    <button type="submit">Enviar</button>
+  </form>
+
+<script>
+  const userId = "web_" + Math.random().toString(36).slice(2, 10);
+  const chat = document.getElementById("chat");
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+
+  function agregarMensaje(texto, rol) {
+    const div = document.createElement("div");
+    div.className = `mensaje ${rol}`;
+    div.innerHTML = `<div class="rol">${rol === "user" ? "Vos" : "Bot"}</div>${texto}`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const mensaje = input.value.trim();
+    if (!mensaje) return;
+
+    agregarMensaje(mensaje, "user");
+    input.value = "";
+    input.disabled = true;
+
+    const divBot = agregarMensaje("Pensando...", "bot");
+
+    try {
+      const resp = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, message: mensaje })
+      });
+      const data = await resp.json();
+      divBot.innerHTML = `<div class="rol">Bot</div>${data.response}`;
+    } catch (err) {
+      divBot.innerHTML = `<div class="rol">Bot</div>Error al conectar con el servidor.`;
+    }
+
+    input.disabled = false;
+    input.focus();
+  });
+</script>
+</body>
+</html>

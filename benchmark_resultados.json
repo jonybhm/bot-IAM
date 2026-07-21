@@ -1,0 +1,107 @@
+[
+  {
+    "modelo": "llama3.2:3b",
+    "pregunta": "¿Qué tipos de métodos de autenticación existen?",
+    "duracion_segundos": 44.78,
+    "longitud_respuesta_caracteres": 812,
+    "respuesta": "Según el documento \"TiposDeAutenticacion.pdf\", algunos de los métodos de autenticación que se mencionan son:\n\n1. **Multifactor Authentication (MFA)**: requiere que el usuario combine varios métodos para probar su identidad, como algo que conozca (contraseña), algo que tenga (device o token) y a veces incluso biometría.\n2. **Passwordless**: no requiere un secreto compartido entre dos partes, sino que se basa en credenciales como códigos de una vez (OTCs), aplicaciones autenticadoras y passkeys.\n3. **Certificate-based Authentication**: utiliza certificados digitales para identificar a los usuarios, dispositivos y máquinas antes de conceder acceso a todos los puntos de conexión.\n\nEs importante destacar que estos métodos pueden ser combinados para proporcionar una capa adicional de seguridad y protección."
+  },
+  {
+    "modelo": "llama3.2:3b",
+    "pregunta": "¿Por qué no es recomendable tener token de sesión con fecha de expiración grande?",
+    "duracion_segundos": 24.5,
+    "longitud_respuesta_caracteres": 316,
+    "respuesta": "Según el contexto proporcionado, es recomendable tener tokens de sesión con una fecha de expiración grande porque, si un atacante logra obtener un token de sesión comprometido, puede aprovechar este tiempo adicional para explorar y explotar vulnerabilidades dentro de la red antes de que el token se revoca o expire."
+  },
+  {
+    "modelo": "llama3.2:3b",
+    "pregunta": "¿Qué significa AAA?",
+    "duracion_segundos": 29.38,
+    "longitud_respuesta_caracteres": 515,
+    "respuesta": "En el contexto de la autenticación y el control de acceso, AAA es un acrónimo que se refiere a tres conceptos fundamentales:\n\n**A**: Autenticación (Authentication)\n- Es el proceso de verificar la identidad de una persona o entidad con respecto a un recurso.\n\n**A**: Autorización (Authorization)\n- Es el proceso de determinar qué acciones puede realizar una persona o entidad que ha sido autenticada para acceder a un recurso.\n\n**A**: Acceso (Access)\n- Se refiere al acto de obtener permiso para utilizar un recurso."
+  },
+  {
+    "modelo": "llama3.2:3b",
+    "pregunta": "¿Qué es PKCE y para qué sirve?",
+    "duracion_segundos": 40.34,
+    "longitud_respuesta_caracteres": 935,
+    "respuesta": "Según el contexto proporcionado, PKCE (Proof Key for Code Exchange) es un protocolo de autenticación utilizado en la autenticación por código (Authorization Code Flow) en OpenID Connect.\n\nPKCE se utiliza para mitigar ataques de replay en la Authorization Code Flow. El código verifier es una cadena aleatoria única generada a partir de un token de sesión secreto, que se almacena en el servidor de autorización y se envía junto con el código de autorización al cliente.\n\nEl código verifier sirve como una \"cartera\" para el código de autorización, garantizando que sea único y no pueda ser reutilizado o interceptado por un atacante. El servidor de autorización compara el código de autorización enviado por el cliente con el código verificador almacenado, para verificar su integridad.\n\nEn resumen, PKCE es una medida de seguridad adicional que ayuda a prevenir ataques de replay y garantiza la autenticidad del código de autorización."
+  },
+  {
+    "modelo": "llama3.2:3b",
+    "pregunta": "¿Qué diferencia hay entre autenticación y autorización?",
+    "duracion_segundos": 43.4,
+    "longitud_respuesta_caracteres": 1070,
+    "respuesta": "Según el contexto proporcionado, la autenticación es el proceso de verificar la identidad de un usuario o sistema, mientras que la autorización es el proceso de decidir si el usuario o sistema tiene permiso para acceder a una recursos o realizar una acción determinada.\n\nEn otras palabras:\n\n* La autenticación se enfoca en probar la identidad de un usuario o sistema, es decir, verificar si el que solicita acceso es quien afirma ser.\n* La autorización se enfoca en decidir si el usuario o sistema tiene permiso para realizar una acción determinada, es decir, verificar si tiene los derechos y privilegios necesarios para acceder a un recurso.\n\nAmbas procesos son fundamentales en la gestión de acceso y seguridad, pero funcionan en diferentes niveles. La autenticación se enfoca en verificar la identidad, mientras que la autorización se enfoca en decidir si el usuario o sistema tiene permiso para realizar una acción determinada.\n\nEn resumen, la autenticación es como probar quién es, mientras que la autorización es como decir si puede hacer lo que está solicitando."
+  },
+  {
+    "modelo": "mistral:7b",
+    "pregunta": "¿Qué tipos de métodos de autenticación existen?",
+    "duracion_segundos": 158.03,
+    "longitud_respuesta_caracteres": 1886,
+    "respuesta": " En el contexto proporcionado, se mencionan los siguientes tipos de métodos de autenticación:\n1. Authentication (AuthN): Es el proceso de comprobar una identidad digital y verificar que la petición es del propietario de esa identidad. Puede referirse a un individuo o una organización.\n2. Multi-Factor Authentication (MFA): Es una característica de seguridad que requiere combinar más de un método para probar la identidad de un usuario. Por ejemplo, algo que el usuario sabe como una contraseña, algo que el usuario tiene como un dispositivo o un token de seguridad, y también puede incluir verificación biométrica como huellas dactilares o reconocimiento facial.\n3. Passwordless Authentication: Es un método de autenticación que no requiere un secreto compartido recordado por el usuario, en lugar de ello se basa en credenciales como códigos de acceso únicos (OTPs), apps de autenticación y passkeys.\n4. Certificate-based Authentication: Utiliza certificados digitales para identificar a usuarios, dispositivos y máquinas antes de concederles acceso en todos los puntos de conexión.\n5. One Time Passcode (OTP) software apps o hardware keys: Son métodos donde la contraseña se puede usar solo una vez y es usualmente válida por un período limitado. También hay app de autenticación diferentes donde se envía una notificación push al dispositivo y se aprueba por el usuario final.\n6. FIDO2 security keys y biometrics como huellas dactilares y reconocimiento facial están comenzando a ser más comunes, y los passkeys están siendo lanzados para reemplazar la autenticación de contraseña completa por completo.\n7. Los identificadores no humanos también necesitan autenticarse. Computadoras y servicios autentican entre sí utilizando cosas como certificados, secretos compartidos (realmente son sólo una contraseña para una aplicación) o otros protocolos desarrollados para este propósito."
+  },
+  {
+    "modelo": "mistral:7b",
+    "pregunta": "¿Por qué no es recomendable tener token de sesión con fecha de expiración grande?",
+    "duracion_segundos": 78.5,
+    "longitud_respuesta_caracteres": 562,
+    "respuesta": " No es recomendable tener tokens de sesión con fecha de expiración grande debido a que si un atacante obtiene acceso a un token comprometido, puede mantener acceso prolongado a los recursos protegidos durante el tiempo que el token permanezca válido. Al limitar la duración del token, se reduce el riesgo de un ataque y la posibilidad de actividad no autorizada en el sistema. En contraste, los tokens con fecha de expiración corta tienen una ventaja a medida que si son interceptados, serán inválidos pronto, lo que hace más fácil detectar actividad sospechosa."
+  },
+  {
+    "modelo": "mistral:7b",
+    "pregunta": "¿Qué significa AAA?",
+    "duracion_segundos": 62.54,
+    "longitud_respuesta_caracteres": 233,
+    "respuesta": " Según el contexto proporcionado, AAA no es mencionado. Por favor, verifique si se trata de alguna sigla o acrónimo que se haya definido en el contexto. Si no lo hace, no tengo información suficiente en los documentos para responder."
+  },
+  {
+    "modelo": "mistral:7b",
+    "pregunta": "¿Qué es PKCE y para qué sirve?",
+    "duracion_segundos": 93.3,
+    "longitud_respuesta_caracteres": 639,
+    "respuesta": " PKCE (Proof Key for Code Exchange) es un método utilizado en la autenticación OAuth 2.0 para evitar ataques de captura de sesión, como el ataque Man-in-the-middle. Este método mejora la seguridad al proporcionar una forma segura de enviar claves compartidas entre el cliente y el servidor de autorización durante el intercambio de códigos de acceso.\n\nEn resumen, PKCE sirve para proteger las comunicaciones en tiempo real entre un cliente (ejemplo: aplicación móvil) y un servidor de autorización (ejemplo: proveedor de identidad externa), mejorando la seguridad de autenticación y autorización en las aplicaciones que utilizan OAuth 2.0."
+  },
+  {
+    "modelo": "mistral:7b",
+    "pregunta": "¿Qué diferencia hay entre autenticación y autorización?",
+    "duracion_segundos": 104.12,
+    "longitud_respuesta_caracteres": 944,
+    "respuesta": " La autenticación y la autorización son dos conceptos clave en el control de acceso y la gestión de identidades, pero tienen diferentes funciones.\n\nLa autenticación se refiere al proceso mediante el cual se verifica que una entidad (usuario o sistema) es quien afirma ser, es decir, comprobar su identidad. Esto puede hacerse utilizando diversos métodos como contraseñas, tarjetas de identificación o biométricos.\n\nLa autorización, por otro lado, se refiere al proceso mediante el cual se determina los derechos y privilegios que tienen las entidades en el acceso a recursos protegidos (como sistemas o documentos). Los mecanismos de autorización incluyen discretionario (DAC) y obligatorio (MAC), que controlan quién puede acceder a qué recurso en un sistema.\n\nEn otras palabras, la autenticación se utiliza para verificar la identidad de una entidad, mientras que la autorización se utiliza para determinar qué recursos acceder a esa entidad."
+  },
+  {
+    "modelo": "llama3.1:8b",
+    "pregunta": "¿Qué tipos de métodos de autenticación existen?",
+    "duracion_segundos": 125.72,
+    "longitud_respuesta_caracteres": 1239,
+    "respuesta": "Según el contexto proporcionado, existen varios tipos de métodos de autenticación:\n\n1. Autenticación de múltiples factores (MFA): requiere combinar más de un método para probar la identidad del usuario.\n2. Autenticación sin contraseña: no requiere una contraseña recordada por el humano y en su lugar, se basa en credenciales como código de verificación único (OTP), aplicaciones autenticadoras, y passkeys.\n3. Certificado basado en autenticación: utiliza certificados digitales para identificar a los usuarios, dispositivos y máquinas antes de conceder acceso en todos los puntos de conexión.\n4. Autenticación mediante tokens de una sola vez (OTP): se utiliza un software o hardware que genera un código único temporal que solo puede utilizarse una vez.\n5. Autenticación mediante aplicaciones autenticadoras: envían una notificación de empuje al dispositivo y la aprueba el usuario final.\n6. FIDO2 security keys físicas y biometrías como huellas dactilares y reconocimiento facial.\n7. Passkeys que están reemplazando a los estándar de autenticación de contraseña.\n\nAdemás, se menciona la existencia de otros métodos no descritos en detalle en el contexto proporcionado, como la autenticación basada en certificados, tokens y credenciales."
+  },
+  {
+    "modelo": "llama3.1:8b",
+    "pregunta": "¿Por qué no es recomendable tener token de sesión con fecha de expiración grande?",
+    "duracion_segundos": 78.09,
+    "longitud_respuesta_caracteres": 840,
+    "respuesta": "Según el contexto proporcionado, se recomienda limitar la vida útil de los tokens de sesión para minimizar el riesgo de que un atacante pueda utilizar un token comprometido durante un período prolongado. Los tokens con fecha de expiración larga pueden ser reutilizados por un atacante hasta que sean revocados o expiren naturalmente, lo que da a los atacantes más oportunidades para explotar el sistema antes de ser detectados.\n\nAdemás, se menciona que los tokens de sesión con fechas de expiración grandes representan \"derechos permanentes\" (standing privilege) y pueden estar sujetos a un mayor riesgo si no se gestionan adecuadamente. En contraste, los tokens con vida útil corta y escopos estrechos permiten a los administradores aplicar control de acceso fino-grano y reducir el daño potencial en caso de que un token sea comprometido."
+  },
+  {
+    "modelo": "llama3.1:8b",
+    "pregunta": "¿Qué significa AAA?",
+    "duracion_segundos": 44.02,
+    "longitud_respuesta_caracteres": 80,
+    "respuesta": "No tengo información suficiente en los documentos para responder a esa pregunta."
+  },
+  {
+    "modelo": "llama3.1:8b",
+    "pregunta": "¿Qué es PKCE y para qué sirve?",
+    "duracion_segundos": 72.43,
+    "longitud_respuesta_caracteres": 559,
+    "respuesta": "PKCE, o \"Proof Key Code Exchange\", es un mecanismo de seguridad desarrollado como extensión de OAuth 2.0 que ayuda a prevenir ataques de inyección de código en la autorización por código (code). \n\nSu función principal es garantizar que el cliente y el servidor intercambian correctamente la información necesaria para obtener tokens de acceso, lo que previene posibles inyecciones de código que podrían permitir a un atacante acceder a recursos protegidos sin permiso.\n\nEn resumen, PKCE ayuda a asegurar la autenticidad del proceso de autorización por código."
+  },
+  {
+    "modelo": "llama3.1:8b",
+    "pregunta": "¿Qué diferencia hay entre autenticación y autorización?",
+    "duracion_segundos": 78.47,
+    "longitud_respuesta_caracteres": 735,
+    "respuesta": "Según el contexto proporcionado en \"AccessControl.pdf\", la autenticación pertenece tanto a la gestión de identidades como a la gestión de acceso, mientras que la autorización es parte de la gestión de autorización.\n\nEn otras palabras, la autenticación se refiere al proceso de verificar la identidad de un usuario o sistema antes de permitirle acceder a un recurso, mientras que la autorización se refiere al proceso de determinar qué acciones pueden realizar los usuarios una vez que han sido autenticados y hayan accedido a un recurso.\n\nPor ejemplo, si se trata de autorizar el acceso a un archivo, primero se debe autenticar a quién está intentando acceder, y luego se debe decidir si tiene permiso para leer o modificar el archivo."
+  }
+]

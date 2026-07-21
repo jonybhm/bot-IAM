@@ -9,11 +9,11 @@ _retriever = Retriever(_embedder)
 _memoria = ConversationMemory()
 
 
-def procesar_mensaje(user_id: str, pregunta: str) -> str:
+def procesar_mensaje(user_id: str, pregunta: str, modelo: str = None) -> str:
     historial = _memoria.obtener_historial(user_id)
     chunks = _retriever.buscar_contexto(pregunta, top_k=settings.RAG_TOP_K)
 
-    respuesta = generar_respuesta(pregunta, chunks, historial)
+    respuesta = generar_respuesta(pregunta, chunks, historial, modelo=modelo)
 
     _memoria.agregar_mensaje(user_id, "user", pregunta)
     _memoria.agregar_mensaje(user_id, "assistant", respuesta)

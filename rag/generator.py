@@ -33,16 +33,17 @@ def armar_prompt(pregunta: str, chunks_contexto: list[dict], historial: list[dic
     return mensajes
 
 
-def generar_respuesta(pregunta: str, chunks_contexto: list[dict], historial: list[dict]) -> str:
+def generar_respuesta(pregunta: str, chunks_contexto: list[dict], historial: list[dict], modelo: str = None) -> str:
     """
     Llama al LLM local (vía Ollama) con el prompt armado y devuelve la respuesta.
     """
     mensajes = armar_prompt(pregunta, chunks_contexto, historial)
+    modelo_a_usar = modelo or settings.OLLAMA_MODEL
 
-    respuesta = ollama.chat(
-        model=settings.OLLAMA_MODEL,
+    respuesta = cliente_ollama.chat(
+        model=modelo_a_usar,
         messages=mensajes,
         keep_alive="30m"
     )
-
     return respuesta["message"]["content"]
+
