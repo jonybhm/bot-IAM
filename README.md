@@ -180,6 +180,12 @@ En un caso de prueba (pregunta de seguimiento sobre "man in the middle" sin cont
 
 El entorno de desarrollo no cuenta con GPU dedicada, por lo que el LLM corre sobre CPU vía Ollama. Esto es funcional pero introduce latencia (varios segundos por respuesta) que sería menor en un entorno con GPU o usando un modelo más liviano.
 
+### Dockerización bloqueada por un problema de entorno local (WSL2)
+
+Se preparó un `Dockerfile` y un `docker-compose.yml` (dos servicios: `api` y `ollama`, comunicándose por red interna de Docker Compose, con volúmenes para persistir el modelo descargado y los datos de la aplicación). La configuración quedó lista y documentada, pero no se pudo validar en ejecución: el entorno local presentó corrupción recurrente del subsistema WSL2 sobre el que corre Docker Desktop en Windows (distros no reconocidas, sistema de archivos en modo solo lectura, fallos de instalación de las distros), persistente incluso después de liberar espacio en disco, actualizar WSL, y recrear las distros desde cero.
+
+Se optó por no seguir invirtiendo tiempo en este problema de infraestructura del entorno de desarrollo, dado que la Dockerización es un requerimiento opcional de prioridad baja en la consigna, y priorizar el resto de los opcionales que no dependen de él. La configuración de Docker queda disponible en el repositorio (`Dockerfile`, `docker-compose.yml`, `.dockerignore`) para ser validada en un entorno sin este problema puntual.
+
 ## Pruebas conversacionales y resultados
 
 Se ejecutó un set de 10 preguntas contra el endpoint `/chat`, cubriendo la mayoría de los documentos del corpus y un caso negativo (pregunta fuera de dominio), con `user_id` distintos para evitar interferencia de memoria entre pruebas.
@@ -199,10 +205,41 @@ Se ejecutó un set de 10 preguntas contra el endpoint `/chat`, cubriendo la mayo
 
 **Prueba de memoria conversacional:** se validó adicionalmente una conversación de dos turnos, donde la segunda pregunta ("¿y ese tipo de token es más o menos seguro que uno de corta duración?") solo tiene sentido en conjunto con la primera ("¿qué es un refresh token?"). El bot respondió correctamente utilizando el contexto del turno anterior, confirmando que la memoria conversacional funciona de punta a punta. Se validó también que conversaciones con distinto `user_id` no comparten historial entre sí.
 
+## Benchmark de modelos
+
+Se comparó el mismo set de 5 preguntas (subconjunto del set de pruebas anterior) ejecutado contra tres modelos Open Source distintos, corriendo en CPU vía Ollama, midiendo tiempo de respuesta:
+
+| Modelo | Tamaño | Tiempo promedio | Rango (min-max) |
+|---|---|---|---|
+| `llama3.2:3b` | 3B parámetros | **36.5s** | 24.5s - 44.8s |
+| `llama3.1:8b` | 8B parámetros | 79.7s | 44.0s - 125.7s |
+| `mistral:7b` | 7B parámetros | 99.3s | 62.5s - 158.0s |
+
+**Observaciones:**
+
+- `llama3.2:3b` resultó más del doble de rápido que los otros dos modelos, consistente con ser el más chico de los tres — es el candidato natural si se prioriza latencia sobre profundidad de respuesta (por ejemplo, para una demo interactiva).
+- `mistral:7b`, a pesar de tener menos parámetros que `llama3.1:8b`, resultó el más lento del grupo. Esto contradice la intuición de que un modelo más chico es siempre más rápido — probablemente se deba a diferencias de arquitectura interna entre ambas familias de modelos, no solo al conteo de parámetros. Es un hallazgo relevante: el tamaño nominal del modelo no es un predictor confiable de latencia real sin medirlo.
+- Cualitativamente, las respuestas de `llama3.2:3b` fueron notablemente más cortas (promedio de ~730 caracteres) que las de `mistral:7b` (~850 caracteres) y `llama3.1:8b` (~690 caracteres, aunque afectado por la respuesta corta de la pregunta de AAA que el modelo no pudo responder). No se observó una degradación evidente en la corrección de las respuestas del modelo más chico para este set de preguntas, aunque el análisis fue cualitativo, no una evaluación automatizada de exactitud.
+- **Recomendación:** para el caso de uso de este bot (soporte interno, no tiempo real crítico), `llama3.1:8b` sigue siendo el default razonable por su balance entre calidad y velocidad. Para escenarios donde la latencia es más crítica que el detalle de la respuesta, `llama3.2:3b` es una alternativa a considerar.
+
+Resultados completos (con el texto de cada respuesta) disponibles en `benchmark_resultados.json`, generado por `tests/benchmark_modelos.py`.
+
+### Frontend propio en lugar de chat-ui
+
+La consigna sugiere `chat-ui` (proyecto open source de HuggingFace) como opción para el frontend. Se evaluó y se decidió no adoptarlo tal cual, por una diferencia de alcance significativa respecto al resto del proyecto: `chat-ui` está construido en SvelteKit (stack de JavaScript distinto al resto del proyecto, en Python), y espera una base de datos MongoDB para persistir conversaciones — dos dependencias nuevas que no aportan valor proporcional al tiempo que tomaría integrarlas, dado que la memoria conversacional del bot ya está resuelta del lado del backend.
+
+En su lugar, se optó por un **frontend propio, minimalista** (HTML + CSS + JavaScript vanilla, sin frameworks), servido directamente desde la misma API de FastAPI mediante archivos estáticos (`app.mount(...)`). Con estética de burbujas de chat similar a ChatGPT. Ventajas de este enfoque:
+
+- Cero dependencias nuevas (no requiere Node.js, npm, ni una base de datos adicional).
+- Reutiliza el endpoint `/chat` existente sin modificaciones ni adaptación de protocolo.
+- Cada sesión de navegador genera un `user_id` aleatorio propio al cargar la página, aprovechando la separación de memoria por usuario ya implementada en el backend — sin necesidad de un sistema de login.
+
+El frontend queda disponible en `frontend/index.html`, accesible en `http://localhost:8000/app` una vez levantada la API.
+
 ## Próximos pasos
 
-- [ ] Dockerizar la aplicación (API + Ollama) con Docker Compose
-- [ ] Benchmark comparativo entre múltiples modelos (`llama3.1:8b`, `mistral:7b`, `llama3.2:3b`)
-- [ ] Frontend conversacional
+- [x] Dockerizar la aplicación (API + Ollama) con Docker Compose — configuración preparada, validación pendiente (ver [Limitaciones conocidas](#limitaciones-conocidas))
+- [x] Benchmark comparativo entre múltiples modelos (`llama3.1:8b`, `mistral:7b`, `llama3.2:3b`)
+- [x] Frontend conversacional
 - [ ] Despliegue en un servicio web (fly.io / Render)
 - [ ] Búsqueda híbrida (semántica + keyword) para mejorar el caso de siglas/acrónimos

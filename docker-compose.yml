@@ -1,0 +1,24 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  api:
+    build: .
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.1:8b
+      - VECTORSTORE_PATH=/app/data/vectorstore
+      - DOCUMENTS_PATH=/app/data/documents
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+
+volumes:
+  ollama_data:

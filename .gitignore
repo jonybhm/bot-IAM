@@ -1,6 +1,6 @@
 .venv/
 .env
 tests/
-.dockerignore
-Dockerfile
-docker-compose.yml
+# .dockerignore
+# Dockerfile
+# docker-compose.yml

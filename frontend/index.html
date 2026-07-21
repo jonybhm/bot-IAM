@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>IAM Support Bot</title>
 <style>
-  :root { --bg: #343541; --bg-user: #444654; --texto: #ececf1; --acento: #10a37f; }
+  :root { --bg: #343541; --bg-user: #444654; --texto: #ececf1; --acento: #FFE700; }
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: -apple-system, sans-serif;
@@ -23,17 +23,17 @@
     background: var(--bg-user); color: var(--texto); font-size: 14px;
   }
   button {
-    background: var(--acento); color: white; border: none;
+    background: var(--acento); color: rgb(2, 2, 2); border: none;
     padding: 12px 20px; border-radius: 8px; cursor: pointer;
   }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
-  <header>IAM Support Bot</header>
+  <header>IAM Bot Conversacional</header>
   <div id="chat"></div>
   <form id="form">
-    <input id="input" placeholder="Preguntá sobre IAM, autenticación, tokens..." autocomplete="off" />
+    <input id="input" placeholder="Podés preguntar sobre IAM, autenticación, tokens, etc..." autocomplete="off" />
     <button type="submit">Enviar</button>
   </form>
 
