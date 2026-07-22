@@ -160,7 +160,7 @@ ChromaDB usa distancia euclidiana (L2) por defecto, que no tiene un rango acotad
 
 ### Grounding del LLM (evitar alucinaciones)
 
-El prompt de sistema instruye explícitamente al modelo a responder únicamente en base al contexto recuperado, y a indicar cuando no tiene información suficiente en lugar de inventar una respuesta. En las pruebas se observó un comportamiento **mayormente estricto, con una excepción parcial** (ver [Limitaciones conocidas](#limitaciones-conocidas)) — queda documentado como un punto de mejora concreto: endurecer aún más la instrucción para eliminar por completo la mezcla de conocimiento general del modelo con el contexto de los documentos.
+El prompt de sistema instruye explícitamente al modelo a responder únicamente en base al contexto recuperado, y a indicar cuando no tiene información suficiente en lugar de inventar una respuesta. 
 
 Se reforzó el grounding con una segunda capa de seguridad a nivel código, no solo de prompt: si la respuesta generada comienza indicando que no hay información suficiente, se descarta cualquier texto adicional que el modelo agregue después (evitando que complete igual con conocimiento general), devolviendo únicamente el mensaje canónico de "no tengo información suficiente".
 
@@ -220,15 +220,15 @@ Se comparó el mismo set de 5 preguntas (subconjunto del set de pruebas anterior
 **Observaciones:**
 
 - `llama3.2:3b` resultó más del doble de rápido que los otros dos modelos, consistente con ser el más chico de los tres — es el candidato natural si se prioriza latencia sobre profundidad de respuesta (por ejemplo, para una demo interactiva).
-- `mistral:7b`, a pesar de tener menos parámetros que `llama3.1:8b`, resultó el más lento del grupo. Esto contradice la intuición de que un modelo más chico es siempre más rápido — probablemente se deba a diferencias de arquitectura interna entre ambas familias de modelos, no solo al conteo de parámetros. Es un hallazgo relevante: el tamaño nominal del modelo no es un predictor confiable de latencia real sin medirlo.
+- `mistral:7b`, a pesar de tener menos parámetros que `llama3.1:8b`, resultó el más lento del grupo. Esto contradice la intuición de que un modelo más chico es siempre más rápido
 - Cualitativamente, las respuestas de `llama3.2:3b` fueron notablemente más cortas (promedio de ~730 caracteres) que las de `mistral:7b` (~850 caracteres) y `llama3.1:8b` (~690 caracteres, aunque afectado por la respuesta corta de la pregunta de AAA que el modelo no pudo responder). No se observó una degradación evidente en la corrección de las respuestas del modelo más chico para este set de preguntas, aunque el análisis fue cualitativo, no una evaluación automatizada de exactitud.
-- **Recomendación:** para el caso de uso de este bot (soporte interno, no tiempo real crítico), `llama3.1:8b` sigue siendo el default razonable por su balance entre calidad y velocidad. Para escenarios donde la latencia es más crítica que el detalle de la respuesta, `llama3.2:3b` es una alternativa a considerar.
+- **Recomendación:** para el caso de uso de este bot , `llama3.1:8b` sigue siendo el default razonable por su balance entre calidad y velocidad. Para escenarios donde la latencia es más crítica que el detalle de la respuesta, `llama3.2:3b` es la alternativa a considerar.
 
 Resultados completos (con el texto de cada respuesta) disponibles en `benchmark_resultados.json`, generado por `tests/benchmark_modelos.py`.
 
 ### Frontend propio en lugar de chat-ui
 
-La consigna sugiere `chat-ui` (proyecto open source de HuggingFace) como opción para el frontend. Se evaluó y se decidió no adoptarlo tal cual, por una diferencia de alcance significativa respecto al resto del proyecto: `chat-ui` está construido en SvelteKit (stack de JavaScript distinto al resto del proyecto, en Python), y espera una base de datos MongoDB para persistir conversaciones — dos dependencias nuevas que no aportan valor proporcional al tiempo que tomaría integrarlas, dado que la memoria conversacional del bot ya está resuelta del lado del backend.
+La consigna sugiere `chat-ui` como opción para el frontend. Se evaluó y se decidió no adoptarlo tal cual, por una diferencia de alcance significativa respecto al resto del proyecto: `chat-ui` está construido en SvelteKit (stack de JavaScript distinto al resto del proyecto, en Python), y espera una base de datos MongoDB para persistir conversaciones — dos dependencias nuevas que no aportan valor proporcional al tiempo que tomaría integrarlas, dado que la memoria conversacional del bot ya está resuelta del lado del backend.
 
 En su lugar, se optó por un **frontend propio, minimalista** (HTML + CSS + JavaScript vanilla, sin frameworks), servido directamente desde la misma API de FastAPI mediante archivos estáticos (`app.mount(...)`). Con estética de burbujas de chat similar a ChatGPT. Ventajas de este enfoque:
 
@@ -237,11 +237,3 @@ En su lugar, se optó por un **frontend propio, minimalista** (HTML + CSS + Java
 - Cada sesión de navegador genera un `user_id` aleatorio propio al cargar la página, aprovechando la separación de memoria por usuario ya implementada en el backend — sin necesidad de un sistema de login.
 
 El frontend queda disponible en `frontend/index.html`, accesible en `http://localhost:8000/app` una vez levantada la API.
-
-## Próximos pasos
-
-- [x] Dockerizar la aplicación (API + Ollama) con Docker Compose — validado y funcionando de punta a punta
-- [x] Benchmark comparativo entre múltiples modelos (`llama3.1:8b`, `mistral:7b`, `llama3.2:3b`)
-- [x] Frontend conversacional
-- [ ] Despliegue en un servicio web (fly.io / Render)
-- [ ] Búsqueda híbrida (semántica + keyword) para mejorar el caso de siglas/acrónimos
