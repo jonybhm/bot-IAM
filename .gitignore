@@ -1,6 +1,8 @@
 .venv/
 .env
 tests/
+data/vectorstore/
+data/memoria.db
 # .dockerignore
 # Dockerfile
 # docker-compose.yml
