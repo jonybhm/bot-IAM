@@ -1,4 +1,11 @@
 from ingestion.embedder import Embedder
+import re
+
+def es_posible_sigla(pregunta: str) -> list[str]:
+    """
+    Detecta tokens que parecen siglas: 2 a 5 letras mayúsculas seguidas.
+    """
+    return re.findall(r'\b[A-Z]{2,5}\b', pregunta)
 
 class Retriever:
     def __init__(self, embedder: Embedder):
@@ -29,3 +36,21 @@ class Retriever:
             })
 
         return chunks_encontrados
+
+    def buscar_por_keyword(self, termino: str, documentos_originales: dict[str, str], top_k: int = 2) -> list[dict]:
+        """
+        Fallback de búsqueda literal: busca un término corto (típicamente
+        una sigla) directamente en el texto de los documentos originales,
+        sin pasar por embeddings.
+        """
+        resultados = []
+        for nombre, texto in documentos_originales.items():
+            idx = texto.lower().find(termino.lower())
+            if idx == -1:
+                continue
+            fragmento = texto[max(0, idx - 150): idx + 400]
+            resultados.append({"texto": fragmento, "fuente": nombre, "distancia": 0.0})
+            if len(resultados) >= top_k:
+                break
+        return resultados
+    

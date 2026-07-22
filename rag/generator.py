@@ -3,14 +3,17 @@ from config.settings import settings
 
 cliente_ollama = ollama.Client(host=settings.OLLAMA_HOST)
 
-PROMPT_SISTEMA = """Sos un asistente para el equipo de IAM (Identity and Access Management).
+
+FRASE_SIN_INFO = "No tengo información suficiente en los documentos para responder esa pregunta."
+
+PROMPT_SISTEMA = f"""Sos un asistente para el equipo de IAM (Identity and Access Management).
 Tu trabajo es responder preguntas sobre conceptos de seguridad, autenticación y control de acceso
 basándote ÚNICAMENTE en el contexto que se te proporciona a continuación.
 
 Reglas importantes:
-- Si la respuesta no está en el contexto proporcionado, respondé ÚNICAMENTE que no tenés
-  información suficiente en los documentos. NO agregues explicaciones de tu conocimiento
-  general aunque el usuario insista o parezca útil hacerlo.
+- Si el contexto no contiene la información necesaria para responder, tu respuesta debe ser
+  EXACTAMENTE el siguiente texto, sin nada antes ni después:
+  "{FRASE_SIN_INFO}"
 - Respondé siempre en español, sin importar el idioma del contexto.
 - Sé preciso y técnico, pero claro.
 """
@@ -33,11 +36,13 @@ def armar_prompt(pregunta: str, chunks_contexto: list[dict], historial: list[dic
     return mensajes
 
 
+
+
 def generar_respuesta(pregunta: str, chunks_contexto: list[dict], historial: list[dict], modelo: str = None) -> str:
+    mensajes = armar_prompt(pregunta, chunks_contexto, historial)
     """
     Llama al LLM local (vía Ollama) con el prompt armado y devuelve la respuesta.
     """
-    mensajes = armar_prompt(pregunta, chunks_contexto, historial)
     modelo_a_usar = modelo or settings.OLLAMA_MODEL
 
     respuesta = cliente_ollama.chat(
@@ -45,5 +50,9 @@ def generar_respuesta(pregunta: str, chunks_contexto: list[dict], historial: lis
         messages=mensajes,
         keep_alive="30m"
     )
-    return respuesta["message"]["content"]
+    texto_respuesta = respuesta["message"]["content"]
+ 
+    if FRASE_SIN_INFO.lower()[:30] in texto_respuesta.lower():
+        return FRASE_SIN_INFO
 
+    return texto_respuesta

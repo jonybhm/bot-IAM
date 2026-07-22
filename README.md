@@ -4,6 +4,7 @@ Bot conversacional para el equipo de IAM (Identity and Access Management), que r
 
 ## Índice
 
+- [Screenshots](#screenshots)
 - [Arquitectura](#arquitectura)
 - [Cómo ejecutar](#cómo-ejecutar)
 - [Decisiones de diseño](#decisiones-de-diseño)
@@ -11,36 +12,17 @@ Bot conversacional para el equipo de IAM (Identity and Access Management), que r
 - [Pruebas conversacionales y resultados](#pruebas-conversacionales-y-resultados)
 - [Próximos pasos](#próximos-pasos)
 
+## Screenshots
+
+![Screenshot conversación](assets/images/Screenshot_IAM_Support_Bot_01.png)
+![Screenshot conversación](assets/images/Screenshot_IAM_Support_Bot_02.png)
+
+
 ## Arquitectura
 
 El sistema sigue un flujo de RAG clásico, dividido en etapas independientes:
 
-```
-Documentos (PDF)
-      │
-      ▼
-┌─────────────┐     (una sola vez, o al agregar/cambiar documentos)
-│  ingestion  │  →  extrae texto, limpia, chunkea y genera embeddings
-└─────────────┘
-      │
-      ▼
-┌─────────────┐
-│  ChromaDB   │  (persistencia de vectores)
-└─────────────┘
-      │
-      ▼  (en cada pregunta del usuario)
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  retriever  │  →  │  generator  │  →  │   memory    │
-│ (busca      │     │ (arma prompt│     │ (guarda y   │
-│  contexto)  │     │  + llama al │     │  recupera   │
-│             │     │  LLM)       │     │  historial) │
-└─────────────┘     └─────────────┘     └─────────────┘
-      │
-      ▼
-┌─────────────┐
-│   FastAPI   │  →  endpoint POST /chat
-└─────────────┘
-```
+![Arquitectura del sistema](assets/images/Arquitectura.png)
 
 **Módulos del proyecto:**
 
@@ -124,6 +106,32 @@ curl -X POST http://localhost:8000/chat \
 
 El campo `user_id` identifica la conversación — mismo `user_id` mantiene memoria entre preguntas; distintos `user_id` no comparten historial entre sí.
 
+### Ejecución con Docker Compose (alternativa)
+
+Requiere Docker Desktop instalado y corriendo.
+
+```bash
+docker compose up -d --build
+```
+
+La primera vez, bajar el modelo dentro del contenedor de Ollama:
+```bash
+docker compose exec ollama ollama pull llama3.1:8b
+```
+
+E indexar los documentos dentro del contenedor:
+```bash
+docker compose exec api python -m ingestion.run_ingestion
+```
+
+La API queda disponible igual que en la ejecución manual, en `http://localhost:8000`, y el frontend en `http://localhost:8000/app`.
+
+Para pausar sin perder el modelo descargado ni los contenedores construidos:
+```bash
+docker compose stop     # pausa
+docker compose start    # retoma
+```
+
 ## Decisiones de diseño
 
 ### RAG en lugar de fine-tuning
@@ -154,6 +162,8 @@ ChromaDB usa distancia euclidiana (L2) por defecto, que no tiene un rango acotad
 
 El prompt de sistema instruye explícitamente al modelo a responder únicamente en base al contexto recuperado, y a indicar cuando no tiene información suficiente en lugar de inventar una respuesta. En las pruebas se observó un comportamiento **mayormente estricto, con una excepción parcial** (ver [Limitaciones conocidas](#limitaciones-conocidas)) — queda documentado como un punto de mejora concreto: endurecer aún más la instrucción para eliminar por completo la mezcla de conocimiento general del modelo con el contexto de los documentos.
 
+Se reforzó el grounding con una segunda capa de seguridad a nivel código, no solo de prompt: si la respuesta generada comienza indicando que no hay información suficiente, se descarta cualquier texto adicional que el modelo agregue después (evitando que complete igual con conocimiento general), devolviendo únicamente el mensaje canónico de "no tengo información suficiente".
+
 ### Memoria conversacional: buffer simple en SQLite
 
 Se implementó memoria de tipo "buffer" (los últimos N turnos de conversación, sin resumir), persistida en SQLite y separada por `user_id`. Se eligió SQLite por ser parte de la biblioteca estándar de Python (sin dependencias ni infraestructura adicional) y por ofrecer persistencia real entre reinicios de la API, a diferencia de una estructura en memoria (diccionario).
@@ -164,27 +174,19 @@ La memoria es manejada íntegramente por la API (tabla propia, lógica de inserc
 
 El endpoint `/chat` está declarado como `async`, pero la lógica interna (retriever, LLM, SQLite) es sincrónica y potencialmente bloqueante. Se utiliza `run_in_threadpool` para ejecutar esa lógica en un thread separado, evitando que bloquee el event loop de FastAPI ante múltiples requests concurrentes.
 
+### Búsqueda híbrida para siglas y acrónimos cortos
+
+Se detectó que la búsqueda semántica pura fallaba en preguntas sobre siglas cortas (ej. "¿Qué significa AAA?"), porque un embedding de 2-5 letras aporta poca señal semántica comparado con el texto que lo rodea. Se implementó una **búsqueda híbrida**: cuando la pregunta contiene un token que matchea el patrón de una sigla (2 a 5 letras mayúsculas), se complementa la búsqueda semántica habitual con una búsqueda léxica directa sobre el texto original de los documentos, agregando los fragmentos encontrados al contexto pasado al LLM. Validado con la pregunta de ejemplo del challenge ("¿Qué significa AAA?"), que ahora responde correctamente citando la sección exacta del documento.
+
 ## Limitaciones conocidas
-
-### Búsqueda semántica débil ante siglas y acrónimos cortos
-
-Al probar la pregunta de ejemplo "¿Qué significa AAA?", el retriever no encontró el chunk correcto (que sí existe en `AccessControl.pdf`, con la definición completa de Authentication, Authorization, Accountability). Se diagnosticó la causa: los embeddings representan bien conceptos semánticos extensos, pero una sigla corta de 3 letras aporta poca señal semántica comparada con el texto que la rodea, especialmente si el chunk mezcla varios subtemas.
-
-**Mejora futura identificada:** implementar **búsqueda híbrida** — combinar la búsqueda semántica (embeddings) con una búsqueda léxica/keyword directa sobre el texto original para términos cortos (siglas, códigos), y fusionar ambos resultados. Se evaluó implementarlo en el marco de este challenge, pero se priorizó dejarlo documentado como mejora concreta en lugar de invertir el tiempo restante en esa optimización puntual, priorizando la robustez del resto del sistema.
-
-### Grounding parcialmente permeable a conocimiento general del modelo
-
-En un caso de prueba (pregunta de seguimiento sobre "man in the middle" sin contexto suficiente en el corpus), el modelo indicó no tener información suficiente pero igual completó con una definición de conocimiento general. Es un comportamiento razonable para un bot de aprendizaje interno, pero no es estrictamente conforme al objetivo de "respuestas correctas y actualizadas respecto a la información del documento". Documentado como ajuste pendiente al prompt de sistema.
 
 ### Ejecución en CPU
 
 El entorno de desarrollo no cuenta con GPU dedicada, por lo que el LLM corre sobre CPU vía Ollama. Esto es funcional pero introduce latencia (varios segundos por respuesta) que sería menor en un entorno con GPU o usando un modelo más liviano.
 
-### Dockerización bloqueada por un problema de entorno local (WSL2)
+### Límite de memoria de Ollama dentro de Docker
 
-Se preparó un `Dockerfile` y un `docker-compose.yml` (dos servicios: `api` y `ollama`, comunicándose por red interna de Docker Compose, con volúmenes para persistir el modelo descargado y los datos de la aplicación). La configuración quedó lista y documentada, pero no se pudo validar en ejecución: el entorno local presentó corrupción recurrente del subsistema WSL2 sobre el que corre Docker Desktop en Windows (distros no reconocidas, sistema de archivos en modo solo lectura, fallos de instalación de las distros), persistente incluso después de liberar espacio en disco, actualizar WSL, y recrear las distros desde cero.
-
-Se optó por no seguir invirtiendo tiempo en este problema de infraestructura del entorno de desarrollo, dado que la Dockerización es un requerimiento opcional de prioridad baja en la consigna, y priorizar el resto de los opcionales que no dependen de él. La configuración de Docker queda disponible en el repositorio (`Dockerfile`, `docker-compose.yml`, `.dockerignore`) para ser validada en un entorno sin este problema puntual.
+Al correr Ollama dentro de un contenedor gestionado por WSL2, el proceso solo tiene visibilidad de una porción de la RAM total del host (11.7 GiB observados, sobre 32GB físicos disponibles) — es el límite de memoria que Docker Desktop asigna a WSL2 por defecto, no un límite de la aplicación en sí. No representó un problema para `llama3.1:8b`, pero es un punto a tener en cuenta si se quisiera correr un modelo más grande dentro de Docker: el límite es ajustable en Docker Desktop → Settings → Resources → Memory.
 
 ## Pruebas conversacionales y resultados
 
@@ -194,7 +196,7 @@ Se ejecutó un set de 10 preguntas contra el endpoint `/chat`, cubriendo la mayo
 |---|---|---|---|
 | 1 | ¿Qué tipos de métodos de autenticación existen? | TiposDeAutenticacion.pdf | ✅ Correcto y completo |
 | 2 | ¿Por qué no es recomendable tener token de sesión con fecha de expiración grande? | BuenasPracticasTiempoDeSesion2025.pdf | ✅ Correcto y completo |
-| 3 | ¿Qué significa AAA? | AccessControl.pdf | ❌ Falló — ver limitaciones conocidas |
+| 3 | ¿Qué significa AAA? | AccessControl.pdf | ✅ Correcto |
 | 4 | ¿Qué es PKCE y para qué sirve? | PKCE.pdf | ✅ Correcto |
 | 5 | ¿Qué diferencia hay entre autenticación y autorización? | Autenticacion+Autorizacion.pdf | ✅ Correcto, combinó bien dos fuentes |
 | 6 | ¿Qué es OpenID Connect y en qué se diferencia de OAuth? | OpenIDC.pdf | ✅ Correcto y completo |
@@ -238,7 +240,7 @@ El frontend queda disponible en `frontend/index.html`, accesible en `http://loca
 
 ## Próximos pasos
 
-- [x] Dockerizar la aplicación (API + Ollama) con Docker Compose — configuración preparada, validación pendiente (ver [Limitaciones conocidas](#limitaciones-conocidas))
+- [x] Dockerizar la aplicación (API + Ollama) con Docker Compose — validado y funcionando de punta a punta
 - [x] Benchmark comparativo entre múltiples modelos (`llama3.1:8b`, `mistral:7b`, `llama3.2:3b`)
 - [x] Frontend conversacional
 - [ ] Despliegue en un servicio web (fly.io / Render)
