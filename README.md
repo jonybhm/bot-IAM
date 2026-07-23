@@ -10,7 +10,6 @@ Bot conversacional para el equipo de IAM (Identity and Access Management), que r
 - [Decisiones de diseño](#decisiones-de-diseño)
 - [Limitaciones conocidas](#limitaciones-conocidas)
 - [Pruebas conversacionales y resultados](#pruebas-conversacionales-y-resultados)
-- [Próximos pasos](#próximos-pasos)
 
 ## Screenshots
 
@@ -126,18 +125,6 @@ La API queda disponible en `http://localhost:8000`, con documentación interacti
 
 **Vía Swagger:** entrar a `/docs`, desplegar `POST /chat`, usar "Try it out".
 
-**Vía HTTP directo:**
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "usuario1", "message": "¿qué es PKCE?"}'
-```
-
-El campo `user_id` identifica la conversación — mismo `user_id` mantiene memoria entre preguntas; distintos `user_id` no comparten historial entre sí.
-
-
-
 ## Decisiones de diseño
 
 ### RAG en lugar de fine-tuning
@@ -181,6 +168,13 @@ Se evaluaron las tres estrategias de memoria que menciona la consigna como opcio
 **Se optó por Buffer** como estrategia final, por ser la que mejor se ajusta al caso de uso real de este bot: consultas puntuales de soporte al equipo de IAM, típicamente de pocos turnos por sesión (no conversaciones extensas de decenas de intercambios), donde el costo adicional de resumir (Summary) o indexar vectorialmente (Vectorial) no se traduce en una mejora perceptible, y sí añade latencia y complejidad. 
 
 Se eligió SQLite como mecanismo de persistencia por ser parte de la biblioteca estándar de Python (sin dependencias ni infraestructura adicional) y por ofrecer persistencia real entre reinicios de la API, a diferencia de una estructura en memoria (diccionario). La memoria es manejada íntegramente por la API (tabla propia, lógica de inserción y recuperación propia) — no se utiliza memoria nativa de LangChain ni del LLM, conforme lo exige la consigna.
+
+### Optimización de inferencia en CPU
+
+Al no contar con GPU dedicada, se ajustaron parámetros de generación del LLM para reducir la latencia por respuesta:
+
+- **`num_predict=400`**: limita la cantidad máxima de tokens que el modelo puede generar por respuesta. Este es el ajuste con mayor impacto real en el tiempo de respuesta — cada token generado tiene un costo de cómputo fijo (medido en los logs de Ollama en ~5-6 tokens/segundo en CPU para `llama3.1:8b`), por lo que acotar el largo máximo de la respuesta reduce directamente el tiempo total, a costa de eventualmente cortar una respuesta muy extensa.
+- **`temperature=0.0`**: se evaluó inicialmente como optimización de velocidad, pero se confirmó que **no acelera la generación** — la temperatura controla la aleatoriedad del muestreo de tokens, no la cantidad de cómputo realizado. Se mantuvo en `0.0` igualmente, pero por otro motivo: mayor determinismo entre corridas, lo cual resultó valioso para la reproducibilidad de las pruebas conversacionales documentadas en este README (respuestas más consistentes ante la misma pregunta repetida).
 
 ### Manejo de dependencias async/sync en FastAPI
 
@@ -248,6 +242,3 @@ Se comparó el mismo set de 5 preguntas (subconjunto del set de pruebas anterior
 - **Recomendación:** para el caso de uso de este bot , `llama3.1:8b` sigue siendo el default razonable por su balance entre calidad y velocidad. Para escenarios donde la latencia es más crítica que el detalle de la respuesta, `llama3.2:3b` es la alternativa a considerar.
 
 Resultados completos (con el texto de cada respuesta) disponibles en `benchmark_resultados.json`, generado por `tests/benchmark_modelos.py`.
-
-
-El frontend queda disponible en `frontend/index.html`, accesible en `http://localhost:8000/app` una vez levantada la API.
