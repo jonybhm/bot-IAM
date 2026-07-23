@@ -1,4 +1,5 @@
 import re
+from config.settings import settings
 
 def limpiar_texto(texto: str) -> str:
     """
@@ -29,7 +30,7 @@ def dividir_en_oraciones(texto: str) -> list[str]:
     return [o.strip() for o in oraciones if o.strip()]
 
 
-def chunkear_por_oraciones(texto: str, max_palabras: int = 400, overlap_oraciones: int = 2) -> list[str]:
+def chunkear_por_oraciones(texto: str, max_palabras: int = settings.CHUNK_SIZE, overlap_oraciones: int = settings.CHUNK_OVERLAP_ORACIONES) -> list[str]:
     """
     Agrupa oraciones completas hasta acercarse a max_palabras.
     Nunca corta una oración a la mitad.

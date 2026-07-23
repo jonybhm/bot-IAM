@@ -48,23 +48,16 @@ El sistema sigue un flujo de RAG clásico, dividido en etapas independientes:
 ### Requisitos previos
 
 - Python 3.10+
-- [Ollama](https://ollama.com/download) instalado y corriendo localmente
+- Docker Desktop (o Docker Engine + Compose)
+- [Ollama](https://ollama.com/download) (necesario solo si se ejecuta sin Docker)
 - Un modelo descargado en Ollama:
   ```bash
   ollama pull llama3.1:8b
   ```
 
-### Instalación
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate       # Windows
-pip install -r requirements.txt --break-system-packages
-```
-
 ### Configuración
 
-Copiar `.env.example` a `.env` (o crear `.env` con las siguientes variables):
+Crear `.env` con las siguientes variables:
 
 ```
 OLLAMA_MODEL=llama3.1:8b
@@ -74,39 +67,9 @@ VECTORSTORE_PATH=./data/vectorstore
 RAG_TOP_K=4
 ```
 
-### Indexar los documentos
+Colocar los PDFs  en `data/documents/`.
 
-Colocar los PDFs del corpus en `data/documents/` y correr, desde la raíz del proyecto:
-
-```bash
-python -m ingestion.run_ingestion
-```
-
-Esto genera los embeddings de todos los documentos y los persiste en `data/vectorstore/`. Solo es necesario correrlo una vez, o cada vez que se agreguen o modifiquen documentos.
-
-### Levantar la API
-
-```bash
-uvicorn main:app --reload
-```
-
-La API queda disponible en `http://localhost:8000`, con documentación interactiva (Swagger) en `http://localhost:8000/docs`.
-
-### Probar el bot
-
-**Vía Swagger:** entrar a `/docs`, desplegar `POST /chat`, usar "Try it out".
-
-**Vía HTTP directo:**
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "usuario1", "message": "¿qué es PKCE?"}'
-```
-
-El campo `user_id` identifica la conversación — mismo `user_id` mantiene memoria entre preguntas; distintos `user_id` no comparten historial entre sí.
-
-### Ejecución con Docker Compose (alternativa)
+### Ejecución con Docker Compose 
 
 Requiere Docker Desktop instalado y corriendo.
 
@@ -131,6 +94,49 @@ Para pausar sin perder el modelo descargado ni los contenedores construidos:
 docker compose stop     # pausa
 docker compose start    # retoma
 ```
+
+
+### Instalación sin docker (Alternativa)
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate       # Windows
+pip install -r requirements.txt --break-system-packages
+```
+
+### Indexar los documentos
+
+```bash
+python -m ingestion.run_ingestion
+```
+
+Esto genera los embeddings de todos los documentos y los persiste en `data/vectorstore/`. Solo es necesario correrlo una vez, o cada vez que se agreguen o modifiquen documentos.
+
+### Levantar la API
+
+```bash
+uvicorn main:app --reload
+```
+
+La API queda disponible en `http://localhost:8000`, con documentación interactiva (Swagger) en `http://localhost:8000/docs`.
+
+### Probar el bot
+
+**Vía Frontend:** `http://localhost:8000/app`
+
+**Vía Swagger:** entrar a `/docs`, desplegar `POST /chat`, usar "Try it out".
+
+**Vía HTTP directo:**
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "usuario1", "message": "¿qué es PKCE?"}'
+```
+
+El campo `user_id` identifica la conversación — mismo `user_id` mantiene memoria entre preguntas; distintos `user_id` no comparten historial entre sí.
+
+
 
 ## Decisiones de diseño
 
@@ -164,11 +170,17 @@ El prompt de sistema instruye explícitamente al modelo a responder únicamente 
 
 Se reforzó el grounding con una segunda capa de seguridad a nivel código, no solo de prompt: si la respuesta generada comienza indicando que no hay información suficiente, se descarta cualquier texto adicional que el modelo agregue después (evitando que complete igual con conocimiento general), devolviendo únicamente el mensaje canónico de "no tengo información suficiente".
 
-### Memoria conversacional: buffer simple en SQLite
+### Memoria conversacional: Buffer en SQLite (evaluado frente a Summary y Vectorial)
 
-Se implementó memoria de tipo "buffer" (los últimos N turnos de conversación, sin resumir), persistida en SQLite y separada por `user_id`. Se eligió SQLite por ser parte de la biblioteca estándar de Python (sin dependencias ni infraestructura adicional) y por ofrecer persistencia real entre reinicios de la API, a diferencia de una estructura en memoria (diccionario).
+Se evaluaron las tres estrategias de memoria que menciona la consigna como opcional:
 
-La memoria es manejada íntegramente por la API (tabla propia, lógica de inserción y recuperación propia) — no se utiliza memoria nativa de LangChain ni del LLM, conforme lo exige la consigna.
+- **Buffer** (implementada): guarda los últimos N turnos de la conversación tal cual, sin procesamiento adicional. Costo de tokens por pregunta crece linealmente con la cantidad de turnos recientes incluidos, pero es acotado y predecible al fijar N.
+- **Summary**: resume periódicamente los turnos más viejos en un párrafo condensado (generado por el propio LLM), manteniendo el tamaño del prompt más estable en conversaciones largas, a costa de una llamada adicional al LLM para generar cada resumen (mayor latencia acumulada) y riesgo de perder detalles específicos en la compresión.
+- **Vectorial**: indexa cada turno pasado como embedding y recupera los más relevantes semánticamente a la pregunta actual, en lugar de los más recientes cronológicamente. Más apropiado para conversaciones largas y dispersas donde el contexto relevante no es necesariamente el último intercambio.
+
+**Se optó por Buffer** como estrategia final, por ser la que mejor se ajusta al caso de uso real de este bot: consultas puntuales de soporte al equipo de IAM, típicamente de pocos turnos por sesión (no conversaciones extensas de decenas de intercambios), donde el costo adicional de resumir (Summary) o indexar vectorialmente (Vectorial) no se traduce en una mejora perceptible, y sí añade latencia y complejidad. 
+
+Se eligió SQLite como mecanismo de persistencia por ser parte de la biblioteca estándar de Python (sin dependencias ni infraestructura adicional) y por ofrecer persistencia real entre reinicios de la API, a diferencia de una estructura en memoria (diccionario). La memoria es manejada íntegramente por la API (tabla propia, lógica de inserción y recuperación propia) — no se utiliza memoria nativa de LangChain ni del LLM, conforme lo exige la consigna.
 
 ### Manejo de dependencias async/sync en FastAPI
 
@@ -177,6 +189,17 @@ El endpoint `/chat` está declarado como `async`, pero la lógica interna (retri
 ### Búsqueda híbrida para siglas y acrónimos cortos
 
 Se detectó que la búsqueda semántica pura fallaba en preguntas sobre siglas cortas (ej. "¿Qué significa AAA?"), porque un embedding de 2-5 letras aporta poca señal semántica comparado con el texto que lo rodea. Se implementó una **búsqueda híbrida**: cuando la pregunta contiene un token que matchea el patrón de una sigla (2 a 5 letras mayúsculas), se complementa la búsqueda semántica habitual con una búsqueda léxica directa sobre el texto original de los documentos, agregando los fragmentos encontrados al contexto pasado al LLM. Validado con la pregunta de ejemplo del challenge ("¿Qué significa AAA?"), que ahora responde correctamente citando la sección exacta del documento.
+
+### Frontend propio en lugar de chat-ui
+
+La consigna sugiere `chat-ui` como opción para el frontend. Se evaluó y se decidió no adoptarlo tal cual, por una diferencia de alcance significativa respecto al resto del proyecto: `chat-ui` está construido en SvelteKit (stack de JavaScript distinto al resto del proyecto, en Python), y espera una base de datos MongoDB para persistir conversaciones — dos dependencias nuevas que no aportan valor proporcional al tiempo que tomaría integrarlas, dado que la memoria conversacional del bot ya está resuelta del lado del backend.
+
+En su lugar, se optó por un **frontend propio, minimalista** (HTML + CSS + JavaScript vanilla, sin frameworks), servido directamente desde la misma API de FastAPI mediante archivos estáticos (`app.mount(...)`). Con estética de burbujas de chat similar a ChatGPT. Ventajas de este enfoque:
+
+- Cero dependencias nuevas (no requiere Node.js, npm, ni una base de datos adicional).
+- Reutiliza el endpoint `/chat` existente sin modificaciones ni adaptación de protocolo.
+- Cada sesión de navegador genera un `user_id` aleatorio propio al cargar la página, aprovechando la separación de memoria por usuario ya implementada en el backend — sin necesidad de un sistema de login.
+
 
 ## Limitaciones conocidas
 
@@ -226,14 +249,5 @@ Se comparó el mismo set de 5 preguntas (subconjunto del set de pruebas anterior
 
 Resultados completos (con el texto de cada respuesta) disponibles en `benchmark_resultados.json`, generado por `tests/benchmark_modelos.py`.
 
-### Frontend propio en lugar de chat-ui
-
-La consigna sugiere `chat-ui` como opción para el frontend. Se evaluó y se decidió no adoptarlo tal cual, por una diferencia de alcance significativa respecto al resto del proyecto: `chat-ui` está construido en SvelteKit (stack de JavaScript distinto al resto del proyecto, en Python), y espera una base de datos MongoDB para persistir conversaciones — dos dependencias nuevas que no aportan valor proporcional al tiempo que tomaría integrarlas, dado que la memoria conversacional del bot ya está resuelta del lado del backend.
-
-En su lugar, se optó por un **frontend propio, minimalista** (HTML + CSS + JavaScript vanilla, sin frameworks), servido directamente desde la misma API de FastAPI mediante archivos estáticos (`app.mount(...)`). Con estética de burbujas de chat similar a ChatGPT. Ventajas de este enfoque:
-
-- Cero dependencias nuevas (no requiere Node.js, npm, ni una base de datos adicional).
-- Reutiliza el endpoint `/chat` existente sin modificaciones ni adaptación de protocolo.
-- Cada sesión de navegador genera un `user_id` aleatorio propio al cargar la página, aprovechando la separación de memoria por usuario ya implementada en el backend — sin necesidad de un sistema de login.
 
 El frontend queda disponible en `frontend/index.html`, accesible en `http://localhost:8000/app` una vez levantada la API.
