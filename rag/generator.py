@@ -6,6 +6,11 @@ cliente_ollama = ollama.Client(host=settings.OLLAMA_HOST)
 
 FRASE_SIN_INFO = "No tengo información suficiente en los documentos para responder esa pregunta."
 
+FRASES_ADMISION_SIN_INFO = [
+    "no tengo información", "no tengo suficiente información",
+    "no cuento con información", "no dispongo de información",
+]
+
 PROMPT_SISTEMA = f"""Sos un asistente para el equipo de IAM (Identity and Access Management).
 Tu trabajo es responder preguntas sobre conceptos de seguridad, autenticación y control de acceso
 basándote ÚNICAMENTE en el contexto que se te proporciona a continuación.
@@ -36,23 +41,28 @@ def armar_prompt(pregunta: str, chunks_contexto: list[dict], historial: list[dic
     return mensajes
 
 
+def _admite_falta_de_info(texto: str) -> bool:
+    texto_lower = texto.lower()
+    return any(frase in texto_lower for frase in FRASES_ADMISION_SIN_INFO)
 
 
 def generar_respuesta(pregunta: str, chunks_contexto: list[dict], historial: list[dict], modelo: str = None) -> str:
-    mensajes = armar_prompt(pregunta, chunks_contexto, historial)
     """
     Llama al LLM local (vía Ollama) con el prompt armado y devuelve la respuesta.
     """
+    mensajes = armar_prompt(pregunta, chunks_contexto, historial)
     modelo_a_usar = modelo or settings.OLLAMA_MODEL
 
     respuesta = cliente_ollama.chat(
         model=modelo_a_usar,
         messages=mensajes,
+        options={"temperature": 0.0, "num_predict": 400},
         keep_alive="30m"
     )
+    
     texto_respuesta = respuesta["message"]["content"]
  
-    if FRASE_SIN_INFO.lower()[:30] in texto_respuesta.lower():
+    if _admite_falta_de_info(texto_respuesta):
         return FRASE_SIN_INFO
 
     return texto_respuesta

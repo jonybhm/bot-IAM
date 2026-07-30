@@ -1,6 +1,9 @@
 from ingestion.embedder import Embedder
 import re
 
+UMBRAL_RELEVANCIA = 0.75
+
+
 def es_posible_sigla(pregunta: str) -> list[str]:
     """
     Detecta tokens que parecen siglas: 2 a 5 letras mayúsculas seguidas.
@@ -36,6 +39,10 @@ class Retriever:
             })
 
         return chunks_encontrados
+
+    
+    def filtrar_por_relevancia(self, chunks: list[dict], umbral: float = UMBRAL_RELEVANCIA) -> list[dict]:
+        return [c for c in chunks if c["distancia"] <= umbral]
 
     def buscar_por_keyword(self, termino: str, documentos_originales: dict[str, str], top_k: int = 2) -> list[dict]:
         """
