@@ -19,28 +19,54 @@ Bot conversacional para el equipo de IAM (Identity and Access Management), que r
 
 ## Arquitectura
 
-El sistema sigue un flujo de RAG clásico, dividido en etapas independientes:
+El sistema implementa una arquitectura RAG con memoria conversacional híbrida. La API coordina tres fuentes de contexto antes de llamar al LLM:
+
+1. **Contexto documental:** fragmentos recuperados desde el corpus IAM indexado en ChromaDB.
+2. **Memoria reciente:** últimos intercambios del usuario almacenados cronológicamente en SQLite.
+3. **Memoria semántica:** intercambios anteriores recuperados por similitud desde una colección independiente de ChromaDB.
 
 ![Arquitectura del sistema](assets/images/Arquitectura.png)
 
-**Módulos del proyecto:**
+### Módulos del proyecto
 
 | Carpeta | Responsabilidad |
 |---|---|
-| `ingestion/` | Extracción de texto de PDFs (`loader.py`), limpieza y chunking (`chunker.py`), generación de embeddings y persistencia en ChromaDB (`embedder.py`) |
-| `rag/` | Búsqueda semántica de contexto relevante (`retriever.py`), armado de prompt y llamada al LLM (`generator.py`), orquestación del flujo completo (`pipeline.py`) |
-| `memory/` | Memoria conversacional propia, implementada con SQLite (`conversation_memory.py`) — **no se usa memoria nativa de ninguna librería ni del LLM**, tal como exige la consigna |
-| `api/` | Capa HTTP: definición de endpoints (`routes.py`) y schemas de request/response (`schemas.py`) |
-| `config/` | Configuración centralizada, leída desde variables de entorno (`settings.py`) |
-| `data/` | Documentos originales, persistencia de la base vectorial y de la memoria conversacional |
+| `ingestion/` | Extracción de texto de los PDFs, limpieza, chunking, generación de embeddings e indexación del corpus documental en ChromaDB. |
+| `rag/` | Recuperación semántica y léxica, filtrado por relevancia, construcción del prompt, llamada al LLM y orquestación general del flujo. |
+| `memory/` | Memoria conversacional híbrida: Buffer persistente en SQLite, memoria semántica en ChromaDB y combinación de ambas estrategias. |
+| `api/` | Definición del endpoint HTTP `/chat` y de los modelos de request y response. |
+| `config/` | Configuración centralizada mediante variables de entorno. |
+| `frontend/` | Interfaz web en HTML, CSS y JavaScript, servida directamente por FastAPI. |
+| `data/` | PDFs originales, base vectorial persistente y base SQLite de memoria conversacional. |
+| `tests/` | Pruebas del comportamiento fuera de dominio, búsqueda léxica y memoria híbrida. |
 
-**Stack:**
+### Stack tecnológico
 
-- **API:** FastAPI + Uvicorn
-- **LLM:** Ollama (local), modelo por defecto `llama3.1:8b`
-- **Embeddings:** `sentence-transformers`, modelo `paraphrase-multilingual-MiniLM-L12-v2` (multilingüe, ya que los documentos fuente están en inglés y las preguntas de los usuarios se esperan en español)
-- **Base de datos vectorial:** ChromaDB (persistente en disco)
-- **Memoria conversacional:** SQLite, manejada íntegramente por la propia API
+- **API:** FastAPI + Uvicorn.
+- **LLM:** Ollama con `llama3.1:8b` como modelo por defecto.
+- **Embeddings:** `sentence-transformers` con `paraphrase-multilingual-MiniLM-L12-v2`.
+- **Corpus RAG:** colección `documentos_iam` en ChromaDB.
+- **Memoria reciente:** SQLite, separada por `user_id`.
+- **Memoria semántica:** colección `memoria_conversacional` en ChromaDB, filtrada por `user_id`.
+- **Frontend:** HTML, CSS y JavaScript sin frameworks.
+- **Contenedores:** Docker y Docker Compose.
+
+### Flujo de una consulta
+
+1. El frontend envía la pregunta y el `user_id` mediante `POST /chat`.
+2. FastAPI delega el procesamiento al pipeline.
+3. La memoria híbrida recupera:
+   - los últimos turnos desde SQLite;
+   - intercambios anteriores relacionados desde ChromaDB.
+4. El retriever ejecuta una búsqueda semántica sobre el corpus documental.
+5. Si la pregunta contiene una sigla, se agrega una búsqueda léxica directa sobre los documentos.
+6. Los resultados se filtran y deduplican.
+7. El generator construye un prompt que separa explícitamente:
+   - contexto documental;
+   - memoria conversacional;
+   - historial reciente.
+8. Ollama genera la respuesta.
+9. El intercambio se persiste en SQLite y, cuando corresponde, en la memoria vectorial.
 
 ## Cómo ejecutar
 
@@ -54,19 +80,38 @@ El sistema sigue un flujo de RAG clásico, dividido en etapas independientes:
   ollama pull llama3.1:8b
   ```
 
-### Configuración
+Crear un archivo `.env` en la raíz del proyecto tomando como referencia `.env.example`:
 
-Crear `.env` con las siguientes variables:
-
-```
+```env
+# --- LLM local ---
 OLLAMA_MODEL=llama3.1:8b
 OLLAMA_HOST=http://localhost:11434
+
+# --- Documentos y persistencia ---
 DOCUMENTS_PATH=./data/documents
 VECTORSTORE_PATH=./data/vectorstore
+
+# --- Recuperación documental RAG ---
 RAG_TOP_K=4
+RAG_MAX_DISTANCE=0.75
+
+# --- Memoria Buffer en SQLite ---
+MEMORY_SQLITE_PATH=./data/memoria.db
+MEMORY_BUFFER_TURNS=5
+
+# --- Memoria vectorial en ChromaDB ---
+MEMORY_VECTOR_COLLECTION=memoria_conversacional
+MEMORY_VECTOR_TOP_K=3
+MEMORY_VECTOR_MAX_DISTANCE=0.75
 ```
 
-Colocar los PDFs  en `data/documents/`.
+Colocar los documentos PDF en:
+
+```text
+data/documents/
+```
+
+El archivo `.env` no debe versionarse. El repositorio incluye un `.env.example` con las variables requeridas y sin información sensible.
 
 ### Ejecución con Docker Compose 
 
@@ -151,23 +196,15 @@ Se detectó que las tablas de contenido de los PDFs (líneas tipo `TERMINOLOGY..
 
 ChromaDB usa distancia euclidiana (L2) por defecto, que no tiene un rango acotado y es difícil de interpretar o de usar como umbral de corte. Se configuró explícitamente la colección para usar **similitud coseno** (`metadata={"hnsw:space": "cosine"}`), que produce valores interpretables (cercano a 0 = muy similar) y es el estándar para comparar embeddings de texto.
 
-### Grounding del LLM (evitar alucinaciones)
+### Grounding del LLM (reducir riesgo de alucinaciones)
 
 El prompt de sistema instruye explícitamente al modelo a responder únicamente en base al contexto recuperado, y a indicar cuando no tiene información suficiente en lugar de inventar una respuesta. 
 
 Se reforzó el grounding con una segunda capa de seguridad a nivel código, no solo de prompt: si la respuesta generada comienza indicando que no hay información suficiente, se descarta cualquier texto adicional que el modelo agregue después (evitando que complete igual con conocimiento general), devolviendo únicamente el mensaje canónico de "no tengo información suficiente".
 
-### Memoria conversacional: Buffer en SQLite (evaluado frente a Summary y Vectorial)
+### Memoria conversacional híbrida Buffer + Vectorial:
 
-Se evaluaron las tres estrategias de memoria que menciona la consigna como opcional:
-
-- **Buffer** (implementada): guarda los últimos N turnos de la conversación tal cual, sin procesamiento adicional. Costo de tokens por pregunta crece linealmente con la cantidad de turnos recientes incluidos, pero es acotado y predecible al fijar N.
-- **Summary**: resume periódicamente los turnos más viejos en un párrafo condensado (generado por el propio LLM), manteniendo el tamaño del prompt más estable en conversaciones largas, a costa de una llamada adicional al LLM para generar cada resumen (mayor latencia acumulada) y riesgo de perder detalles específicos en la compresión.
-- **Vectorial**: indexa cada turno pasado como embedding y recupera los más relevantes semánticamente a la pregunta actual, en lugar de los más recientes cronológicamente. Más apropiado para conversaciones largas y dispersas donde el contexto relevante no es necesariamente el último intercambio.
-
-**Se optó por Buffer** como estrategia final, por ser la que mejor se ajusta al caso de uso real de este bot: consultas puntuales de soporte al equipo de IAM, típicamente de pocos turnos por sesión (no conversaciones extensas de decenas de intercambios), donde el costo adicional de resumir (Summary) o indexar vectorialmente (Vectorial) no se traduce en una mejora perceptible, y sí añade latencia y complejidad. 
-
-Se eligió SQLite como mecanismo de persistencia por ser parte de la biblioteca estándar de Python (sin dependencias ni infraestructura adicional) y por ofrecer persistencia real entre reinicios de la API, a diferencia de una estructura en memoria (diccionario). La memoria es manejada íntegramente por la API (tabla propia, lógica de inserción y recuperación propia) — no se utiliza memoria nativa de LangChain ni del LLM, conforme lo exige la consigna.
+la solución combina una memoria reciente persistida en SQLite con una memoria semántica persistida en una colección independiente de ChromaDB. SQLite recupera los últimos N turnos en orden cronológico, mientras que ChromaDB permite recuperar intercambios anteriores según su similitud con la consulta actual. Cada registro vectorial contiene un intercambio completo y metadata con el user_id; todas las consultas vectoriales se filtran por ese identificador para garantizar el aislamiento entre conversaciones. Los resultados presentes en el Buffer se eliminan de la memoria vectorial recuperada para evitar duplicados. La memoria conversacional se utiliza únicamente para interpretar el seguimiento de la conversación; las respuestas técnicas continúan fundamentándose en el corpus documental del RAG.
 
 ### Optimización de inferencia en CPU
 
@@ -182,7 +219,9 @@ El endpoint `/chat` está declarado como `async`, pero la lógica interna (retri
 
 ### Búsqueda híbrida para siglas y acrónimos cortos
 
-Se detectó que la búsqueda semántica pura fallaba en preguntas sobre siglas cortas (ej. "¿Qué significa AAA?"), porque un embedding de 2-5 letras aporta poca señal semántica comparado con el texto que lo rodea. Se implementó una **búsqueda híbrida**: cuando la pregunta contiene un token que matchea el patrón de una sigla (2 a 5 letras mayúsculas), se complementa la búsqueda semántica habitual con una búsqueda léxica directa sobre el texto original de los documentos, agregando los fragmentos encontrados al contexto pasado al LLM. Validado con la pregunta de ejemplo del challenge ("¿Qué significa AAA?"), que ahora responde correctamente citando la sección exacta del documento.
+El sistema utiliza una estrategia de recuperación híbrida. Todas las preguntas ejecutan inicialmente una búsqueda semántica sobre ChromaDB. Cuando la consulta contiene una sigla de entre dos y cinco letras mayúsculas, como AAA, IAM, MFA, SSO o PKCE, el pipeline ejecuta además una búsqueda léxica directa sobre los documentos originales.
+
+Esta búsqueda complementaria se invoca desde procesar_mensaje() y llama a buscar_por_keyword() por cada sigla detectada. Los resultados semánticos y léxicos son combinados y deduplicados antes de construir el contexto enviado al LLM. La estrategia fue incorporada porque las siglas cortas suelen aportar poca información semántica al modelo de embeddings.
 
 ### Frontend propio en lugar de chat-ui
 
@@ -194,6 +233,9 @@ En su lugar, se optó por un **frontend propio, minimalista** (HTML + CSS + Java
 - Reutiliza el endpoint `/chat` existente sin modificaciones ni adaptación de protocolo.
 - Cada sesión de navegador genera un `user_id` aleatorio propio al cargar la página, aprovechando la separación de memoria por usuario ya implementada en el backend — sin necesidad de un sistema de login.
 
+### Deploy web no implementado
+
+Se evaluaron las opciones sugeridas por la consigna (AWS, GCP, fly.io, Vercel). Vercel se descartó por incompatibilidad de modelo de ejecución: es una plataforma serverless orientada a funciones de corta duración, y no sostiene procesos persistentes como requiere Ollama con un modelo cargado en memoria. De las opciones restantes, fly.io es la más compatible con la arquitectura ya containerizada del proyecto (Docker Compose), pero correr un modelo de 7-8B de forma sostenida requiere un plan pago (los tiers gratuitos de fly.io, AWS y GCP no ofrecen suficiente RAM para este caso), representando un costo económico recurrente no justificado para el alcance de este challenge. Se priorizó, en el tiempo disponible, profundizar en la solidez del backend, el RAG, y la corrección de las respuestas del bot, por sobre incurrir en un costo de infraestructura cloud para una demo puntual. La aplicación queda completamente funcional y reproducible localmente vía Docker Compose (ver sección "Cómo ejecutar"), lista para desplegarse en cualquiera de estas plataformas si se dispusiera de presupuesto para el tier con RAM suficiente.
 
 ## Limitaciones conocidas
 
@@ -242,3 +284,21 @@ Se comparó el mismo set de 5 preguntas (subconjunto del set de pruebas anterior
 - **Recomendación:** para el caso de uso de este bot , `llama3.1:8b` sigue siendo el default razonable por su balance entre calidad y velocidad. Para escenarios donde la latencia es más crítica que el detalle de la respuesta, `llama3.2:3b` es la alternativa a considerar.
 
 Resultados completos (con el texto de cada respuesta) disponibles en `benchmark_resultados.json`, generado por `tests/benchmark_modelos.py`.
+
+### Estado de los requerimientos
+
+| Requerimiento | Estado | Implementación |
+|---|---|---|
+| API en Python | Cumplido | FastAPI + Uvicorn |
+| LLM Open Source | Cumplido | Llama ejecutado localmente mediante Ollama |
+| Conocimiento documental | Cumplido | RAG sobre PDFs indexados en ChromaDB |
+| Memoria administrada por la API | Cumplido | Implementación propia sin memoria nativa del LLM |
+| Documentación | Cumplido | README, decisiones de diseño, pruebas y diagrama de arquitectura |
+| RAG | Cumplido | Búsqueda semántica, filtrado por distancia y grounding |
+| VectorDB para memoria | Cumplido | Memoria híbrida: Buffer SQLite + colección independiente de ChromaDB |
+| Documentación técnica | Cumplido | Arquitectura, módulos, flujo y decisiones de diseño |
+| Frontend estilo chat | Cumplido | HTML, CSS y JavaScript servidos por FastAPI |
+| Deploy web | No implementado | Justificación técnica y económica documentada |
+| Benchmark de modelos | Cumplido | Comparación de tres modelos ejecutados mediante Ollama |
+| Comparación de estrategias de memoria | Parcialmente cumplido | Se implementó una estrategia híbrida Buffer + Vectorial; Summary no fue implementada |
+| Dockerización | Cumplido | Dockerfile + Docker Compose |

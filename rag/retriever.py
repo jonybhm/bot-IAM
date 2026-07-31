@@ -1,14 +1,16 @@
+from config.settings import settings
 from ingestion.embedder import Embedder
 import re
-
-UMBRAL_RELEVANCIA = 0.75
 
 
 def es_posible_sigla(pregunta: str) -> list[str]:
     """
     Detecta tokens que parecen siglas: 2 a 5 letras mayúsculas seguidas.
     """
-    return re.findall(r'\b[A-Z]{2,5}\b', pregunta)
+    siglas = re.findall(r"\b[A-ZÁÉÍÓÚÑ]{2,5}\b", pregunta)
+
+    return list(dict.fromkeys(siglas))
+
 
 class Retriever:
     def __init__(self, embedder: Embedder):
@@ -41,7 +43,7 @@ class Retriever:
         return chunks_encontrados
 
     
-    def filtrar_por_relevancia(self, chunks: list[dict], umbral: float = UMBRAL_RELEVANCIA) -> list[dict]:
+    def filtrar_por_relevancia(self, chunks: list[dict], umbral: float = settings.RAG_MAX_DISTANCE) -> list[dict]:
         return [c for c in chunks if c["distancia"] <= umbral]
 
     def buscar_por_keyword(self, termino: str, documentos_originales: dict[str, str], top_k: int = 2) -> list[dict]:
@@ -51,13 +53,36 @@ class Retriever:
         sin pasar por embeddings.
         """
         resultados = []
-        for nombre, texto in documentos_originales.items():
-            idx = texto.lower().find(termino.lower())
-            if idx == -1:
-                continue
-            fragmento = texto[max(0, idx - 150): idx + 400]
-            resultados.append({"texto": fragmento, "fuente": nombre, "distancia": 0.0})
-            if len(resultados) >= top_k:
-                break
+
+        # Ejemplo: encuentra "AAA", pero no "baaa".
+        patron = re.compile(
+            rf"(?<!\w){re.escape(termino)}(?!\w)",
+            flags=re.IGNORECASE
+        )
+
+        for nombre_documento, texto in documentos_originales.items():
+            for coincidencia in patron.finditer(texto):
+                inicio = max(
+                    0,
+                    coincidencia.start() - 200
+                )
+
+                fin = min(
+                    len(texto),
+                    coincidencia.end() + 500
+                )
+
+                fragmento = texto[inicio:fin].strip()
+
+                resultados.append({
+                    "texto": fragmento,
+                    "fuente": nombre_documento,
+                    "distancia": 0.0,
+                    "tipo_busqueda": "lexica"
+                })
+
+                if len(resultados) >= top_k:
+                    return resultados
+
         return resultados
     

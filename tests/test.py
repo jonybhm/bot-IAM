@@ -6,4 +6,4 @@
 # print(texto[max(0, idx-100):idx+500])
 
 from rag.pipeline import procesar_mensaje
-print(procesar_mensaje("test_grounding", "¿cuándo murió Muhammad Ali?"))
+print(procesar_mensaje("test_grounding", "¿que es OAuth?"))
